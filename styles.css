@@ -1,3 +1,4 @@
+/* styles.css - include tutte le regole (big-touch + footer safe area) */
 :root{
   --bg: #0f1114;
   --card: #0e1114;
@@ -6,14 +7,14 @@
   --accent-mid: #ffd166;
   --accent-end: #ff6b6b;
   --glass: rgba(255,255,255,0.03);
-  --size: 340px;               /* cerchio principale */
+  --size: 340px;
   --ring-bg: rgba(255,255,255,0.06);
   --ring-color: var(--accent-start);
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
 
-  /* BIG TOUCH: dimensioni molto grandi dei numeri nelle wheel */
-  --wheel-item-h: 128px;       /* altezza per ciascun elemento della wheel (big touch) */
-  --wheel-font-size: 88px;     /* dimensione del numero nelle wheel (molto grande) */
+  /* BIG TOUCH */
+  --wheel-item-h: 128px;
+  --wheel-font-size: 88px;
 }
 
 * {box-sizing: border-box}
@@ -31,13 +32,8 @@ body{
   padding:28px;
 }
 
-/* contenitore principale */
-.app{
-  width:min(1000px,100%);
-  text-align:center;
-}
+.app{ width:min(1000px,100%); text-align:center; }
 
-/* titolo */
 .title{
   font-weight:800;
   margin:0 0 34px 0;
@@ -47,15 +43,8 @@ body{
   text-shadow: 0 2px 12px rgba(0,0,0,0.6);
 }
 
-/* layout principale */
-.timer-area{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:36px;
-}
+.timer-area{ display:flex; flex-direction:column; align-items:center; gap:36px; }
 
-/* cerchio centrale */
 .clock-wrap{
   width:var(--size);
   height:var(--size);
@@ -73,28 +62,10 @@ body{
 }
 .clock-wrap:active{ transform: scale(.995) }
 
-/* SVG ring */
-.progress-ring{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  transform: rotate(-90deg);
-  pointer-events:none;
-}
-.ring-bg{
-  stroke: var(--ring-bg);
-  stroke-width:12;
-}
-.ring{
-  stroke: var(--ring-color);
-  stroke-width:12;
-  transition: stroke-width .35s ease, stroke .3s linear;
-  transform-origin: 50% 50%;
-  will-change: stroke-dashoffset;
-}
+.progress-ring{ position:absolute; inset:0; width:100%; height:100%; transform: rotate(-90deg); pointer-events:none; }
+.ring-bg{ stroke: var(--ring-bg); stroke-width:12; }
+.ring{ stroke: var(--ring-color); stroke-width:12; transition: stroke-width .35s ease, stroke .3s linear; transform-origin: 50% 50%; will-change: stroke-dashoffset; }
 
-/* tempo centrale */
 .time-label{
   z-index:2;
   font-size:52px;
@@ -104,25 +75,11 @@ body{
   text-shadow: 0 12px 44px rgba(0,0,0,0.75), 0 1px 0 rgba(255,255,255,0.02);
 }
 
-/* controls */
-.controls{ display:flex; gap:18px; align-items:center; justify-content:center}
-
-/* bottoni base */
-.btn{
-  border:0;
-  padding:12px 22px;
-  border-radius:12px;
-  font-weight:800;
-  cursor:pointer;
-  font-size:16px;
-  background:transparent;
-  color:var(--muted);
-  box-shadow: none;
-  transition: transform .12s ease, box-shadow .12s ease;
-}
+/* Controls + big start button */
+.controls{ display:flex; gap:18px; align-items:center; justify-content:center }
+.btn{ border:0; padding:12px 22px; border-radius:12px; font-weight:800; cursor:pointer; font-size:16px; background:transparent; color:var(--muted); transition: transform .12s ease, box-shadow .12s ease; }
 .btn:active{ transform: translateY(1px) }
 
-/* Avvia: versione 'big touch' */
 .btn.primary{
   background: linear-gradient(90deg,var(--accent-start),var(--accent-mid));
   color:#041014;
@@ -133,39 +90,23 @@ body{
   min-width:160px;
   letter-spacing:0.6px;
 }
-.btn.secondary{
-  background: linear-gradient(90deg,#22262a,#191b1d);
-  color:var(--muted);
-  padding:16px 22px;
-  font-size:16px;
-}
+.btn.secondary{ background: linear-gradient(90deg,#22262a,#191b1d); color:var(--muted); padding:16px 22px; font-size:16px; }
 
-/* hint */
-.hint{
-  margin:0;
-  color:var(--muted);
-  font-size:14px;
-}
+.hint{ margin:0; color:var(--muted); font-size:14px; }
 
-/* overlay fullscreen per picker */
-.overlay{
-  position:fixed;
-  inset:0;
-  display:grid;
-  place-items:center;
-  background: linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0.6));
-  z-index:1200;
-  padding:0;
-}
+/* Picker overlay full screen */
+.overlay{ position:fixed; inset:0; display:grid; place-items:center; background: linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0.6)); z-index:1200; padding:0; }
 .overlay[hidden]{ display:none !important; }
 
-/* picker FULLSCREEN */
+/* picker now respects safe-area and has absolute footer */
 .picker{
   width:100%;
   height:100vh;
   max-width:none;
   border-radius:0;
   padding:18px 20px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  position:relative; /* required for absolute footer */
   display:flex;
   flex-direction:column;
   gap:12px;
@@ -173,29 +114,11 @@ body{
   color:#eaf7ee;
 }
 
-/* header/footer sticky */
-.picker-header{
-  height:64px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-}
-.picker-header h2{
-  margin:0;
-  font-size:20px;
-  font-weight:800;
-}
-.picker-footer{
-  height:84px;
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap:12px;
-  padding-bottom:12px;
-}
+/* header */
+.picker-header{ height:64px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.picker-header h2{ margin:0; font-size:20px; font-weight:800; }
 
-/* area wheel: grande centro */
+/* body: leave bottom padding so wheels aren't hidden by footer */
 .picker-body{
   flex:1 1 auto;
   display:flex;
@@ -204,9 +127,27 @@ body{
   padding:12px;
   gap:18px;
   overflow:hidden;
+  padding-bottom: 160px; /* ensure footer won't overlap wheels */
 }
 
-/* wheels: FORZA affiancamento e permetti shrink senza overflow */
+/* footer: absolute and above the browser UI */
+.picker-footer{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 12px);
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  padding:12px 20px;
+  z-index: 1201;
+  pointer-events:auto;
+  /* optional faint backdrop to separate from wheels */
+  background: linear-gradient(180deg, rgba(0,0,0,0.00), rgba(0,0,0,0.04));
+}
+
+/* Wheels layout - force row, allow shrink to display both */
 .wheels{
   display:flex;
   flex-direction:row;
@@ -218,25 +159,14 @@ body{
   max-width:1400px;
   padding:0 12px;
   box-sizing:border-box;
-  overflow-x:hidden; /* evita scrollbar orizzontale */
+  overflow-x:hidden;
 }
+.wheel-col{ flex: 1 1 0; min-width:0; max-width:50%; display:flex; flex-direction:column; gap:8px; align-items:center; }
+.wheel-label{ color:var(--muted); font-size:15px; font-weight:700; }
 
-/* ogni colonna si riduce per rientrare nello schermo (min-width:0 è cruciale) */
-.wheel-col{
-  flex: 1 1 0;
-  min-width: 0;        /* permette lo shrink corretto */
-  max-width: 50%;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  align-items:center;
-}
-.wheel-label{ color:var(--muted); font-size:15px; font-weight:700 }
-
-/* WHEEL: occupa gran parte dello schermo centrale */
+/* individual wheel */
 .wheel{
   width:100%;
-  /* height già sufficientemente grande; lascia spazio per header/footer */
   height:calc(100vh - 220px);
   border-radius:14px;
   background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.03));
@@ -255,14 +185,8 @@ body{
   scrollbar-width: thin;
 }
 
-/* lista e item molto grandi */
-.list{
-  list-style:none;
-  padding:0;
-  margin:0;
-  display:block;
-  width:100%;
-}
+/* list & items */
+.list{ list-style:none; padding:0; margin:0; display:block; width:100%; }
 .wheel-item{
   height:var(--wheel-item-h);
   line-height:var(--wheel-item-h);
@@ -278,15 +202,13 @@ body{
   width:100%;
   box-sizing:border-box;
   padding:0 8px;
-  white-space:nowrap; /* evita wrap del numero */
+  white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
 
-/* spacer */
 .spacer{ pointer-events:none; visibility:hidden; height:var(--wheel-item-h); }
 
-/* highlight centrale grande */
 .wheel::after{
   content:"";
   position:absolute;
@@ -299,7 +221,7 @@ body{
   background: linear-gradient(180deg, rgba(255,255,255,0.006), rgba(0,0,0,0.02));
 }
 
-/* stato selezionato con molta profondità */
+/* selected */
 .wheel-item.selected{
   color: #031011;
   background: linear-gradient(90deg,var(--accent-start),var(--accent-mid));
@@ -309,25 +231,15 @@ body{
   box-shadow: 0 26px 88px rgba(3,6,9,0.68);
 }
 
-/* BREAKPOINT: solo per schermi strettissimi impila verticalmente (<=360px) */
-@media (max-width:360px){
-  .wheels{ flex-direction:column; gap:12px; padding:0 20px; }
-  .wheel-col{ width:100%; max-width:none; min-width:unset }
-  .wheel{ height: calc(100vh - 200px) }
-  .picker-header{ height:56px }
-  .picker-footer{ height:88px }
-  :root{ --wheel-item-h: 80px; --wheel-font-size:46px } /* scala giù per schermi piccolissimi */
-}
-
-/* adattamento per telefoni piccoli ma non ultra small */
+/* small breakpoints */
 @media (max-width:520px){
   :root{ --wheel-item-h: 100px; --wheel-font-size:64px; --size:300px; }
   .wheel{ height: calc(100vh - 210px) }
   .time-label{ font-size:48px }
 }
-
-/* fallback ultra-small */
-@media (max-width:420px){
-  :root{ --size:300px; }
-  .time-label{ font-size:48px }
+@media (max-width:360px){
+  .wheels{ flex-direction:column; gap:12px; padding:0 20px; }
+  .wheel-col{ width:100%; max-width:none; min-width:unset }
+  .wheel{ height: calc(100vh - 200px) }
+  :root{ --wheel-item-h: 64px; --wheel-font-size:36px }
 }
