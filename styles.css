@@ -101,12 +101,15 @@ body{
 /* picker now respects safe-area and has absolute footer */
 .picker{
   width:100%;
-  height:100vh;
+  /* usa dvh / lvh / fallback a 100vh per compatibilità */
+  height:100dvh; /* modern browsers */
+  height:100lvh; /* legacy experimental (some UA) */
+  height:100vh;  /* fallback */
   max-width:none;
   border-radius:0;
   padding:18px 20px;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-  position:relative; /* required for absolute footer */
+  /* NON aggiungere padding-bottom qui: il footer è fixed */
+  position:relative;
   display:flex;
   flex-direction:column;
   gap:12px;
@@ -127,25 +130,31 @@ body{
   padding:12px;
   gap:18px;
   overflow:hidden;
-  padding-bottom: 160px; /* ensure footer won't overlap wheels */
+  /* ulteriore margine per garantire che la parte bassa dei wheels non venga coperta */
+  padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 96px);
 }
 
-/* footer: absolute and above the browser UI */
+/* footer fixed per garantire visibilità sopra le UI del browser */
 .picker-footer{
-  position: absolute;
+  position: fixed; /* FIX: non absolute, così rimane visibile sempre */
   left: 0;
   right: 0;
-  bottom: env(safe-area-inset-bottom, 12px);
+  /* rimane sopra la barra del browser rispettando la safe area */
+  bottom: calc(env(safe-area-inset-bottom, 12px));
   display:flex;
   align-items:center;
   justify-content:flex-end;
   gap:12px;
   padding:12px 20px;
-  z-index: 1201;
+  z-index: 1400; /* più alto dell'overlay/picker */
   pointer-events:auto;
-  /* optional faint backdrop to separate from wheels */
-  background: linear-gradient(180deg, rgba(0,0,0,0.00), rgba(0,0,0,0.04));
+  /* separatore leggero per chiarezza */
+  backdrop-filter: blur(6px); /* opzionale ma gradevole su modern browsers */
+  background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.06));
+  box-shadow: 0 -6px 28px rgba(0,0,0,0.45);
 }
+
+.picker-footer .btn { pointer-events: auto; z-index: 1401; }
 
 /* Wheels layout - force row, allow shrink to display both */
 .wheels{
