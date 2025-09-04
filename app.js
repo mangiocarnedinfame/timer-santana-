@@ -1,220 +1,419 @@
-// app.js - aggiunta pause/resume toccando il centro, e fix picker/footer mobile
+// app.js - Estensione: modalità Allenamento (Gym) con 4 cerchi + sequenza Prep/Work/Rest/Rounds.
+// - Riuso del picker wheel (stesso markup/stili), Wake Lock, WebAudio, pause/resume con tap.
+// - Mantiene le funzioni principali: startTimer, pauseTimer, resumeTimer, finishTimer, stopTimer.
+// - Focus trap, keyboard e safe-area invariati.
+
 (() => {
-  // DOM elements
+  // ----------------------------- DOM -----------------------------
+  const app = document.getElementById('app');
+  const pageTitle = document.getElementById('pageTitle');
+
+  // Mode switch
+  const modeTimerBtn = document.getElementById('modeTimer');
+  const modeGymBtn = document.getElementById('modeGym');
+
+  // Standard timer area
+  const standardArea = document.getElementById('standardArea');
   const clockWrap = document.getElementById('clockWrap');
   const timeLabel = document.getElementById('timeLabel');
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
+  const phaseLabel = document.getElementById('phaseLabel');
 
+  // Gym area
+  const gymArea = document.getElementById('gymArea');
+  const prepCircle = document.getElementById('prepCircle');
+  const workCircle = document.getElementById('workCircle');
+  const restCircle = document.getElementById('restCircle');
+  const roundsCircle = document.getElementById('roundsCircle');
+  const prepValueEl = document.getElementById('prepValue');
+  const workValueEl = document.getElementById('workValue');
+  const restValueEl = document.getElementById('restValue');
+  const roundsValueEl = document.getElementById('roundsValue');
+  const gymStartBtn = document.getElementById('gymStartBtn');
+
+  // Picker modal
   const overlay = document.getElementById('pickerOverlay');
+  const pickerTitle = document.getElementById('pickerTitle');
+  const minutesLabel = document.getElementById('minutesLabel');
+  const secondsLabel = document.getElementById('secondsLabel');
+  const secondsCol = document.getElementById('secondsCol');
   const minutesWheel = document.getElementById('minutesWheel');
   const secondsWheel = document.getElementById('secondsWheel');
   const confirmPicker = document.getElementById('confirmPicker');
   const cancelPicker = document.getElementById('cancelPicker');
 
+  // SVG ring
   const ring = document.querySelector('.ring');
+  const R = 88;
+  const C = 2 * Math.PI * R;
+  ring.style.strokeDasharray = `${C}px`;
+  ring.style.strokeDashoffset = `0px`;
 
-  // config
+  // ----------------------------- Config/State -----------------------------
   const MAX_MIN = 59;
   const MAX_SEC = 59;
 
-  // state
+  // Standard timer state
   let selectedMin = 0, selectedSec = 30;
   let duration = selectedMin * 60 + selectedSec;
+
+  // Runtime state
   let rafId = null;
   let startTs = null;
   let remaining = 0;
+  let isPaused = false;
+  let pausedAt = 0;
+  let pausedRemaining = 0;
+  let totalDurationOnRun = 0;
   let wakeLock = null;
   let audioCtx = null;
 
-  // pause/resume specific
-  let isPaused = false;
-  let pausedRemaining = 0;
-  let totalDurationOnRun = 0; // duration used for current run (countdown base)
+  // Picker state
+  let isPickerOpen = false;
+  let pickerContext = 'standard-time'; // 'standard-time' | 'prep' | 'work' | 'rest' | 'rounds'
+  let pickerMode = 'time'; // 'time' | 'integer'
 
-  // SVG radius math
-  const R = 88;
-  const C = 2 * Math.PI * R;
-  if (ring) {
-    ring.style.strokeDasharray = `${C}px`;
-    ring.style.strokeDashoffset = `0px`;
-  }
+  // Wheel state helpers
+  const wheelState = {
+    minutes: { locked:false, initialized:false, scrollTimeout:null },
+    seconds: { locked:false, initialized:false, scrollTimeout:null }
+  };
 
-  // helpers
-  function pad(n){ return String(n).padStart(2,'0') }
+  // Gym state
+  const gym = {
+    prepSec: 10,
+    workSec: 30,
+    restSec: 20,
+    rounds: 3,
+    active: false,
+    phases: [],
+    index: -1
+  };
+
+  // ----------------------------- Utils -----------------------------
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (sec) => `${pad(Math.floor(sec/60))}:${pad(sec%60)}`;
+
   function updateLabel(min, sec){
     timeLabel.textContent = `${pad(min)}:${pad(sec)}`;
+    timeLabel.setAttribute('aria-label', `${min} minuti e ${sec} secondi`);
   }
   updateLabel(selectedMin, selectedSec);
 
-  // ---------------- wheel build / selection (unchanged logic but robust) ----------------
-  function buildWheel(container, max){
-    const prev = container.querySelector('.list');
-    if (prev) prev.remove();
+  function updateGymUI(){
+    prepValueEl.textContent = fmt(gym.prepSec);
+    workValueEl.textContent = fmt(gym.workSec);
+    restValueEl.textContent = fmt(gym.restSec);
+    roundsValueEl.textContent = String(gym.rounds);
+  }
+  updateGymUI();
 
+  function setPhaseInfo(text){
+    phaseLabel.textContent = text;
+  }
+
+  // ----------------------------- Wheel (picker) -----------------------------
+  function cleanupListeners(container){
+    if (container._scrollHandler){ container.removeEventListener('scroll', container._scrollHandler); container._scrollHandler=null; }
+    if (container._keyHandler){ container.removeEventListener('keydown', container._keyHandler); container._keyHandler=null; }
+  }
+
+  function buildWheel(container, max){
+    cleanupListeners(container);
+    container.innerHTML = '';
     const ul = document.createElement('ul');
     ul.className = 'list';
-    for(let i=0;i<=max;i++){
+
+    // Create items 0..max
+    for (let i=0;i<=max;i++){
       const li = document.createElement('li');
       li.className = 'wheel-item';
-      li.dataset.value = String(i);
-      li.textContent = pad(i);
+      li.textContent = i.toString().padStart(2,'0');
+      li.dataset.value = i;
       ul.appendChild(li);
     }
+
+    // Spacers for center alignment
+    const sample = document.createElement('li');
+    sample.className='wheel-item';
+    sample.textContent='00';
     container.appendChild(ul);
+    const itemH = 128; // synced with CSS var default
+    const containerH = Math.max(0, container.getBoundingClientRect().height) || (window.innerHeight - 220);
+    const spacerH = Math.max(0, Math.round((containerH - itemH)/2));
 
-    requestAnimationFrame(() => {
-      const firstItem = ul.querySelector('.wheel-item');
-      if (!firstItem) return;
-      const itemH = Math.round(firstItem.getBoundingClientRect().height) || 56;
-      const containerH = Math.round(container.getBoundingClientRect().height) || (window.innerHeight - 220);
-      const spacerH = Math.max(0, Math.round((containerH - itemH) / 2));
-      const topSpacer = document.createElement('li');
-      topSpacer.className = 'spacer';
-      topSpacer.style.height = `${spacerH}px`;
-      const bottomSpacer = topSpacer.cloneNode();
-      ul.insertBefore(topSpacer, ul.firstChild);
-      ul.appendChild(bottomSpacer);
+    const topSpacer = document.createElement('li'); topSpacer.className='spacer'; topSpacer.style.height = `${spacerH}px`;
+    const bottomSpacer = document.createElement('li'); bottomSpacer.className='spacer'; bottomSpacer.style.height = `${spacerH}px`;
+    ul.insertBefore(topSpacer, ul.firstChild);
+    ul.appendChild(bottomSpacer);
 
-      requestAnimationFrame(() => {
-        const initial = (container === minutesWheel) ? selectedMin : selectedSec;
-        scrollToValue(container, initial);
-        markSelected(ul, Number(initial));
-      });
-    });
     return ul;
   }
 
   function markSelected(list, value){
-    if (!list) return;
-    const items = Array.from(list.querySelectorAll('.wheel-item'));
-    if (items.length === 0) return;
-    const parentRect = list.parentElement.getBoundingClientRect();
-    const centerY = parentRect.top + parentRect.height/2;
-    items.forEach(li => {
-      const num = Number(li.dataset.value);
-      if (num === value) li.classList.add('selected');
-      else li.classList.remove('selected');
-
-      const rect = li.getBoundingClientRect();
-      const dist = (rect.top + rect.height/2) - centerY;
-      const norm = Math.max(-1, Math.min(1, -dist / 160));
-      const rotate = norm * 16;
-      const translate = Math.abs(norm) * -32;
-      const scale = 1 + (1 - Math.abs(norm)) * 0.06;
-      li.style.transform = `rotateX(${rotate}deg) translateZ(${translate}px) scale(${scale})`;
-      li.style.opacity = `${0.55 + (1 - Math.abs(norm)) * 0.5}`;
-    });
+    const items = list.querySelectorAll('.wheel-item');
+    items.forEach(it => it.classList.toggle('selected', Number(it.dataset.value) === value));
   }
 
-  function scrollToValue(container, value){
-    const list = container.querySelector('.list');
-    if (!list) return;
-    const item = list.querySelector(`.wheel-item[data-value="${value}"]`);
-    if (!item) return;
-    const itemH = item.getBoundingClientRect().height;
-    const parentH = container.getBoundingClientRect().height;
-    const target = item.offsetTop - (parentH/2 - itemH/2);
-    try { container.scrollTo({ top: target, behavior: 'smooth' }); }
-    catch(e){ container.scrollTop = target; }
-  }
+  function setupWheel(container, list, max, onSelect){
+    const state = container === minutesWheel ? wheelState.minutes : wheelState.seconds;
+    const itemH = 128;
+    let lastScrollTop = container.scrollTop;
 
-  function setupWheelBehavior(container, list, max, onSelect){
-    if (container._scrollHandler) { container.removeEventListener('scroll', container._scrollHandler); container._scrollHandler = null; }
-    if (container._keyHandler) { container.removeEventListener('keydown', container._keyHandler); container._keyHandler = null; }
+    function snap(){
+      const y = container.scrollTop;
+      const idx = Math.round((y / itemH));
+      const value = Math.min(max, Math.max(0, idx));
+      const targetTop = value * itemH;
+      container.classList.add('smooth-scroll');
+      container.scrollTop = targetTop;
+      setTimeout(()=> container.classList.remove('smooth-scroll'), 180);
+      onSelect(value);
+      markSelected(list, value);
+    }
 
-    let scrollTimer = null;
-
-    const scrollHandler = () => {
-      const items = Array.from((list || container).querySelectorAll('.wheel-item'));
-      if (!items.length) return;
-      const parentRect = container.getBoundingClientRect();
-      const centerY = parentRect.top + parentRect.height/2;
-      let closest = null;
-      let minDist = Infinity;
-      items.forEach(li => {
-        const rect = li.getBoundingClientRect();
-        const dist = Math.abs((rect.top + rect.height/2) - centerY);
-        if (dist < minDist){ minDist = dist; closest = li; }
-      });
-      if (!closest) return;
-      const v = Number(closest.dataset.value);
-      markSelected(list, v);
-
-      if (scrollTimer) clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(()=> {
-        scrollToValue(container, v);
-        onSelect(v);
-      }, 120);
+    container._scrollHandler = () => {
+      if (state.locked) return;
+      lastScrollTop = container.scrollTop;
+      if (state.scrollTimeout) clearTimeout(state.scrollTimeout);
+      state.scrollTimeout = setTimeout(snap, 120);
     };
+    container.addEventListener('scroll', container._scrollHandler);
 
-    const keyHandler = (e) => {
-      const key = e.key;
-      const cur = (container === minutesWheel) ? selectedMin : selectedSec;
-      if (key === 'ArrowUp' || key === 'PageUp'){ e.preventDefault(); const nxt = Math.max(0, cur - 1); scrollToValue(container, nxt); }
-      else if (key === 'ArrowDown' || key === 'PageDown'){ e.preventDefault(); const nxt = Math.min(max, cur + 1); scrollToValue(container, nxt); }
-      else if (key === 'Home'){ e.preventDefault(); scrollToValue(container, 0); }
-      else if (key === 'End'){ e.preventDefault(); scrollToValue(container, max); }
+    container._keyHandler = (e) => {
+      if (e.key === 'ArrowUp'){ e.preventDefault(); const v = Math.max(0, (container._value||0)-1); container._value=v; container.scrollTop = v*itemH; onSelect(v); markSelected(list,v); }
+      if (e.key === 'ArrowDown'){ e.preventDefault(); const v = Math.min(max, (container._value||0)+1); container._value=v; container.scrollTop = v*itemH; onSelect(v); markSelected(list,v); }
     };
-
-    container._scrollHandler = scrollHandler;
-    container._keyHandler = keyHandler;
-    container.addEventListener('scroll', scrollHandler, { passive: true });
-    container.addEventListener('keydown', keyHandler);
+    container.addEventListener('keydown', container._keyHandler);
   }
 
-  function initWheels(){
-    const minUl = buildWheel(minutesWheel, MAX_MIN);
-    const secUl = buildWheel(secondsWheel, MAX_SEC);
-    setupWheelBehavior(minutesWheel, minUl, MAX_MIN, v => { selectedMin = v; });
-    setupWheelBehavior(secondsWheel, secUl, MAX_SEC, v => { selectedSec = v; });
-    return { minUl, secUl };
+  function trapFocus(modalRoot){
+    lastFocused = document.activeElement;
+    const focusable = modalRoot.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])');
+    const first = focusable[0];
+    const last = focusable[focusable.length-1];
+    trapKeyHandler = (e) => {
+      if (e.key === 'Tab'){
+        if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first?.focus(); }
+      }
+      if (e.key === 'Escape'){ closePicker(); }
+    };
+    modalRoot.addEventListener('keydown', trapKeyHandler);
+    setTimeout(()=> first?.focus(), 0);
+  }
+  function releaseFocusTrap(){
+    if (trapKeyHandler){ overlay.removeEventListener('keydown', trapKeyHandler); trapKeyHandler = null; }
+    try{ lastFocused?.focus(); }catch{}
+  }
+  let trapKeyHandler = null;
+  let lastFocused = null;
+
+  function openPickerFor(ctx){
+    pickerContext = ctx;
+    // Configure UI for context
+    if (ctx === 'rounds'){
+      pickerMode = 'integer';
+      pickerTitle.textContent = 'Imposta giri';
+      minutesLabel.textContent = 'Giri';
+      secondsCol.hidden = true;
+
+      // Build only minutes wheel 0..99, but clamp at 1..99 on confirm
+      const list = buildWheel(minutesWheel, 99);
+      const current = Math.min(99, Math.max(1, gym.rounds));
+      minutesWheel._value = current;
+      // Position to item
+      const itemH = 128; minutesWheel.scrollTop = current*itemH;
+      markSelected(list, current);
+      setupWheel(minutesWheel, list, 99, v => { minutesWheel._value = v; });
+    } else {
+      pickerMode = 'time';
+      secondsCol.hidden = false;
+      minutesLabel.textContent = 'Minuti';
+      secondsLabel.textContent = 'Secondi';
+      pickerTitle.textContent = ({
+        'standard-time': 'Imposta tempo',
+        'prep': 'Imposta Preparazione',
+        'work': 'Imposta Work',
+        'rest': 'Imposta Rest'
+      })[ctx] || 'Imposta';
+
+      // Build both wheels 0..59
+      const minList = buildWheel(minutesWheel, MAX_MIN);
+      const secList = buildWheel(secondsWheel, MAX_SEC);
+
+      // Initial values depending on context
+      let initMin=0, initSec=0;
+      if (ctx === 'standard-time'){ initMin = selectedMin; initSec = selectedSec; }
+      if (ctx === 'prep'){ initMin = Math.floor(gym.prepSec/60); initSec = gym.prepSec%60; }
+      if (ctx === 'work'){ initMin = Math.floor(gym.workSec/60); initSec = gym.workSec%60; }
+      if (ctx === 'rest'){ initMin = Math.floor(gym.restSec/60); initSec = gym.restSec%60; }
+
+      const itemH = 128;
+      minutesWheel._value = initMin; secondsWheel._value = initSec;
+      minutesWheel.scrollTop = initMin*itemH; secondsWheel.scrollTop = initSec*itemH;
+      markSelected(minList, initMin); markSelected(secList, initSec);
+
+      setupWheel(minutesWheel, minList, MAX_MIN, v => { minutesWheel._value = v; });
+      setupWheel(secondsWheel, secList, MAX_SEC, v => { secondsWheel._value = v; });
+    }
+
+    isPickerOpen = true;
+    overlay.hidden = false;
+    trapFocus(overlay);
   }
 
-  let { minUl, secUl } = initWheels();
-
-  // ---------------- pause / resume logic ----------------
-  function pauseTimer(){
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
-    isPaused = true;
-    pausedRemaining = remaining;
-    // release wake lock while paused
-    releaseWakeLock();
-    // subtle visual feedback
-    clockWrap.animate([{ transform: 'scale(1)' }, { transform: 'scale(.985)' }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' });
+  function closePicker(){
+    if (!isPickerOpen) return;
+    isPickerOpen = false;
+    overlay.hidden = true;
+    releaseFocusTrap();
+    cleanupListeners(minutesWheel);
+    cleanupListeners(secondsWheel);
   }
 
-  function runCountdown(total){
-    // start countdown from `total` seconds
-    startTs = performance.now();
-    totalDurationOnRun = total;
-    // ensure UI buttons
+  cancelPicker.addEventListener('click', closePicker);
+
+  confirmPicker.addEventListener('click', () => {
+    if (pickerMode === 'integer' && pickerContext === 'rounds'){
+      let v = Math.max(1, Math.min(99, minutesWheel._value ?? gym.rounds));
+      gym.rounds = v;
+      updateGymUI();
+      closePicker();
+      return;
+    }
+
+    // time values
+    const m = minutesWheel._value ?? 0;
+    const s = secondsWheel._value ?? 0;
+    const secs = m*60 + s;
+
+    if (pickerContext === 'standard-time'){
+      if (secs <= 0){
+        timeLabel.animate([{ transform:'translateY(0)' },{ transform:'translateY(-8px)' },{ transform:'translateY(0)' }], {duration:320, easing:'cubic-bezier(.2,.9,.2,1)'});
+        return;
+      }
+      selectedMin = m; selectedSec = s; duration = secs;
+      updateLabel(selectedMin, selectedSec);
+      closePicker();
+      return;
+    }
+
+    if (pickerContext === 'prep'){ gym.prepSec = secs; updateGymUI(); closePicker(); return; }
+    if (pickerContext === 'work'){ gym.workSec = secs; updateGymUI(); closePicker(); return; }
+    if (pickerContext === 'rest'){ gym.restSec = secs; updateGymUI(); closePicker(); return; }
+  });
+
+  // ----------------------------- Audio -----------------------------
+  async function initAudioContext(){
+    if (!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch{ audioCtx = null; }
+    }
+    return audioCtx;
+  }
+  async function playStartSound(){
+    const ctx = await initAudioContext(); if (!ctx) return;
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(880, ctx.currentTime);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+    o.connect(g).connect(ctx.destination); o.start();
+    o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.38);
+    o.stop(ctx.currentTime + 0.42);
+  }
+  async function playFinishSound(){
+    const ctx = await initAudioContext(); if (!ctx) return;
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type='triangle'; o.frequency.setValueAtTime(330, ctx.currentTime);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+    o.connect(g).connect(ctx.destination); o.start();
+    o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.28);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+    o.stop(ctx.currentTime + 0.62);
+  }
+
+  // ----------------------------- WakeLock -----------------------------
+  async function requestWakeLock(){
+    try {
+      if ('wakeLock' in navigator && navigator.wakeLock.request){
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch { wakeLock = null; }
+  }
+  function releaseWakeLock(){ try{ wakeLock?.release?.(); }catch{} finally{ wakeLock = null; }}
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && rafId !== null && !isPaused && !wakeLock){
+      await requestWakeLock();
+    }
+  });
+
+  // ----------------------------- Ring color interpolation -----------------------------
+  function hexToRgb(hex){ const n = parseInt(hex.slice(1),16); return {r:(n>>16)&255, g:(n>>8)&255, b:n&255}; }
+  const COL_START = getComputedStyle(document.documentElement).getPropertyValue('--accent-start').trim() || '#4de0a6';
+  const COL_MID   = getComputedStyle(document.documentElement).getPropertyValue('--accent-mid').trim() || '#ffd166';
+  const COL_END   = getComputedStyle(document.documentElement).getPropertyValue('--accent-end').trim() || '#ff6b6b';
+  const S = hexToRgb(COL_START), M = hexToRgb(COL_MID), E = hexToRgb(COL_END);
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function interpolateColor(pct){
+    // pct: 1 -> 0
+    const t = 1 - Math.max(0, Math.min(1, pct));
+    const mid = t<0.5 ? t*2 : (t-0.5)*2;
+    const from = t<0.5 ? S : M;
+    const to = t<0.5 ? M : E;
+    const r = Math.round(lerp(from.r, to.r, mid));
+    const g = Math.round(lerp(from.g, to.g, mid));
+    const b = Math.round(lerp(from.b, to.b, mid));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ----------------------------- Timer engine -----------------------------
+  function setRingProgress(pct){ // pct: 1..0
+    const offset = C * (1 - pct);
+    ring.style.strokeDashoffset = `${offset}px`;
+    ring.style.stroke = interpolateColor(pct);
+  }
+
+  function runCountdown(total, resumeFromPause=false){
+    if (total <= 0) return;
+
+    const now = performance.now();
+    if (resumeFromPause){
+      const elapsedBeforePause = totalDurationOnRun - pausedRemaining;
+      startTs = now - elapsedBeforePause*1000;
+    } else {
+      startTs = now;
+      totalDurationOnRun = total;
+    }
+
+    isPaused = false;
+    startBtn.setAttribute('aria-pressed','true');
+    clockWrap.setAttribute('aria-label', 'Pausa timer');
+    clockWrap.classList.remove('paused');
+    timeLabel.classList.remove('paused');
     startBtn.hidden = true;
     stopBtn.hidden = false;
-    startBtn.setAttribute('aria-pressed','true');
-    isPaused = false;
 
-    // request wake lock
     requestWakeLock();
 
-    function frame(now){
-      const elapsed = (now - startTs) / 1000;
+    function frame(ts){
+      const elapsed = (ts - startTs)/1000;
       const rem = Math.max(0, totalDurationOnRun - elapsed);
       remaining = rem;
-      const pct = rem / totalDurationOnRun;
-      const mm = Math.floor(rem / 60);
-      const ss = Math.floor(rem % 60);
+
+      const pct = totalDurationOnRun>0 ? rem/totalDurationOnRun : 0;
+      const mm = Math.floor(rem/60);
+      const ss = Math.floor(rem%60);
       updateLabel(mm, ss);
+      setRingProgress(pct);
 
-      // ring animation
-      const offset = C * (1 - pct);
-      if (ring) ring.style.strokeDashoffset = `${offset}px`;
-      if (ring) ring.style.stroke = interpolateColor(pct);
-
-      if (rem <= 0.001){
-        cancelAnimationFrame(rafId);
-        rafId = null;
+      if (rem <= 0.05){
+        cancelAnimationFrame(rafId); rafId = null;
         finishTimer();
         return;
       }
@@ -223,226 +422,224 @@
     rafId = requestAnimationFrame(frame);
   }
 
-  function resumeTimer(){
-    if (!isPaused) return;
-    if (pausedRemaining <= 0) { isPaused = false; pausedRemaining = 0; return; }
-    // start countdown from pausedRemaining
-    runCountdown(pausedRemaining);
-  }
-
-  // replace previous startTimer to use runCountdown
   function startTimer(){
-    duration = selectedMin * 60 + selectedSec;
-    if (duration <= 0) {
-      clockWrap.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'translateX(0)' }], { duration: 340, easing: 'ease-out' });
+    duration = selectedMin*60 + selectedSec;
+    if (duration <= 0){
+      clockWrap.animate([{transform:'translateX(0)'},{transform:'translateX(-8px)'},{transform:'translateX(8px)'},{transform:'translateX(0)'}], {duration:340, easing:'ease-out'});
       return;
     }
-    // visual thickness on start
-    if (ring) { ring.style.transition = 'stroke-width .35s ease, stroke .3s linear'; ring.style.strokeWidth = '18'; }
+    ring.style.strokeWidth = '18';
     playStartSound();
-    runCountdown(duration);
+    runCountdown(duration, false);
+  }
+
+  function pauseTimer(){
+    if (!rafId) return;
+    isPaused = true;
+    pausedAt = performance.now();
+    pausedRemaining = Math.max(0, remaining);
+    cancelAnimationFrame(rafId); rafId = null;
+
+    timeLabel.classList.add('paused');
+    clockWrap.classList.add('paused');
+    startBtn.textContent = 'Riprendi';
+    startBtn.hidden = false;
+    stopBtn.hidden = false;
+
+    releaseWakeLock();
+
+    clockWrap.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}], {duration:220, easing:'ease-out'});
+  }
+
+  function resumeTimer(){
+    if (!isPaused) return;
+    if (pausedRemaining <= 0){ isPaused=false; pausedRemaining=0; return; }
+    startBtn.textContent = 'Avvia';
+    runCountdown(pausedRemaining, true);
+  }
+
+  async function finishTimer(){
+    // Se in modalità Gym ed esistono fasi successive → beep corto e avanti.
+    if (gym.active && gym.index < gym.phases.length - 1){
+      await playStartSound();
+      nextGymPhase();
+      return;
+    }
+
+    // Fine completa
+    await playFinishSound();
+
+    // Reset UI cerchio
+    startBtn.hidden = false;
+    stopBtn.hidden = true;
+    startBtn.setAttribute('aria-pressed','false');
+    startBtn.textContent = 'Avvia';
+    clockWrap.setAttribute('aria-label', 'Apri selettore tempo');
+    clockWrap.classList.remove('paused');
+    timeLabel.classList.remove('paused');
+    ring.style.strokeWidth = '12';
+    ring.style.strokeDashoffset = `0px`;
+
+    // Se eravamo in Gym → torna alla griglia 4 cerchi
+    if (gym.active){
+      gym.active = false;
+      phaseLabel.hidden = true;
+      standardArea.hidden = true;
+      gymArea.hidden = false;
+      pageTitle.textContent = 'Allenamento';
+      updateGymUI();
+    } else {
+      updateLabel(selectedMin, selectedSec);
+    }
+
+    releaseWakeLock();
   }
 
   function stopTimer(){
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
+    if (rafId){ cancelAnimationFrame(rafId); rafId = null; }
     isPaused = false;
     pausedRemaining = 0;
     startBtn.hidden = false;
     stopBtn.hidden = true;
     startBtn.setAttribute('aria-pressed','false');
-    if (ring) { ring.style.strokeWidth = '12'; ring.style.strokeDashoffset = `0px`; }
-    updateLabel(selectedMin, selectedSec);
+    startBtn.textContent = 'Avvia';
+    clockWrap.setAttribute('aria-label', 'Apri selettore tempo');
+    clockWrap.classList.remove('paused');
+    timeLabel.classList.remove('paused');
+    ring.style.strokeWidth = '12';
+    ring.style.strokeDashoffset = `0px`;
     releaseWakeLock();
+
+    if (gym.active){
+      // Abbandona sequenza e torna a setup Gym
+      gym.active = false;
+      phaseLabel.hidden = true;
+      standardArea.hidden = true;
+      gymArea.hidden = false;
+      pageTitle.textContent = 'Allenamento';
+      updateGymUI();
+    } else {
+      updateLabel(selectedMin, selectedSec);
+    }
   }
 
-  function finishTimer(){
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const ctx = audioCtx;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(330, ctx.currentTime);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01);
-      o.connect(g).connect(ctx.destination);
-      o.start();
-      o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.28);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-      o.stop(ctx.currentTime + 0.62);
-    } catch(e){}
+  // ----------------------------- Gym sequence -----------------------------
+  function buildPhases(){
+    const list = [];
+    if (gym.prepSec > 0){
+      list.push({type:'prep', dur:gym.prepSec});
+    }
+    for (let r=1; r<=gym.rounds; r++){
+      list.push({type:'work', dur:gym.workSec, round:r});
+      if (gym.restSec > 0){
+        list.push({type:'rest', dur:gym.restSec, round:r});
+      }
+    }
+    return list;
+  }
+  function phaseLabelText(phase){
+    const base = phase.type === 'prep' ? 'Preparazione' : (phase.type === 'work' ? 'Work' : 'Rest');
+    const roundTxt = phase.type === 'prep' ? '' : ` • Round ${phase.round}/${gym.rounds}`;
+    return base + roundTxt;
+  }
+  function nextGymPhase(){
+    gym.index++;
+    const ph = gym.phases[gym.index];
+    if (!ph){ finishTimer(); return; }
 
-    clockWrap.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], { duration: 520, easing: 'cubic-bezier(.2,.9,.2,1)' });
+    phaseLabel.hidden = false;
+    setPhaseInfo(phaseLabelText(ph));
+    ring.style.strokeWidth = '18';
 
-    startBtn.hidden = false;
-    stopBtn.hidden = true;
-    startBtn.setAttribute('aria-pressed','false');
-
-    if (ring) { ring.style.strokeDashoffset = `${C}px`; ring.style.strokeWidth = '12'; }
-    releaseWakeLock();
-    updateLabel(selectedMin, selectedSec);
+    // Aggiorna etichetta iniziale
+    updateLabel(Math.floor(ph.dur/60), ph.dur%60);
+    runCountdown(ph.dur, false);
   }
 
-  // start/stop buttons
+  function startGym(){
+    // Validazioni base
+    if (gym.workSec <= 0){  // shake il grid
+      gymArea.animate([{transform:'translateX(0)'},{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'translateX(0)'}], {duration:260, easing:'ease-out'});
+      return;
+    }
+    if (gym.rounds <= 0){ gym.rounds = 1; updateGymUI(); }
+
+    // Prepara fasi e UI
+    gym.phases = buildPhases();
+    gym.index = -1;
+    gym.active = true;
+
+    // Switch a cerchio grande
+    gymArea.hidden = true;
+    standardArea.hidden = false;
+    pageTitle.textContent = 'Interval Timer';
+
+    playStartSound();
+    nextGymPhase();
+  }
+
+  // ----------------------------- Events -----------------------------
+  modeTimerBtn.addEventListener('click', () => {
+    modeTimerBtn.classList.add('selected'); modeTimerBtn.setAttribute('aria-selected','true');
+    modeGymBtn.classList.remove('selected'); modeGymBtn.setAttribute('aria-selected','false');
+    pageTitle.textContent = 'Timer';
+    gymArea.hidden = true;
+    standardArea.hidden = false;
+    phaseLabel.hidden = true;
+  });
+  modeGymBtn.addEventListener('click', () => {
+    modeGymBtn.classList.add('selected'); modeGymBtn.setAttribute('aria-selected','true');
+    modeTimerBtn.classList.remove('selected'); modeTimerBtn.setAttribute('aria-selected','false');
+    pageTitle.textContent = 'Allenamento';
+    standardArea.hidden = true;
+    gymArea.hidden = false;
+    phaseLabel.hidden = true;
+  });
+
   startBtn.addEventListener('click', () => {
-    if (rafId || isPaused) return;
-    startTimer();
+    if (rafId) return;
+    if (isPaused) resumeTimer(); else startTimer();
   });
   stopBtn.addEventListener('click', stopTimer);
 
-  // click on clock: open picker only if timer not running and not paused
-  clockWrap.addEventListener('click', (e) => {
-    if (rafId || isPaused) {
-      // toggle pause/resume
-      if (isPaused) resumeTimer();
-      else pauseTimer();
-    } else {
-      openPicker();
-    }
+  clockWrap.addEventListener('click', () => {
+    if (rafId) { pauseTimer(); }
+    else if (isPaused) { resumeTimer(); }
+    else { openPickerFor('standard-time'); }
   });
   clockWrap.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key===' ') {
+    if (e.key === 'Enter' || e.key === ' '){
       e.preventDefault();
-      if (rafId || isPaused) {
-        if (isPaused) resumeTimer();
-        else pauseTimer();
-      } else {
-        openPicker();
-      }
+      if (rafId) pauseTimer();
+      else if (isPaused) resumeTimer();
+      else openPickerFor('standard-time');
     }
   });
 
-  // open/close picker (rebuild wheels on open)
-  function openPicker(){
-    overlay.hidden = false;
-    const rebuiltMin = buildWheel(minutesWheel, MAX_MIN);
-    const rebuiltSec = buildWheel(secondsWheel, MAX_SEC);
-    setupWheelBehavior(minutesWheel, rebuiltMin, MAX_MIN, v => { selectedMin = v; });
-    setupWheelBehavior(secondsWheel, rebuiltSec, MAX_SEC, v => { selectedSec = v; });
-    minUl = rebuiltMin; secUl = rebuiltSec;
-    requestAnimationFrame(()=>{
-      scrollToValue(minutesWheel, selectedMin);
-      scrollToValue(secondsWheel, selectedSec);
-      setTimeout(()=> { markSelected(minUl, selectedMin); markSelected(secUl, selectedSec); }, 140);
+  // Gym circles open pickers
+  function attachOpen(el, ctx){
+    el.addEventListener('click', () => { openPickerFor(ctx); });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openPickerFor(ctx); }
     });
-    trapFocus(overlay);
   }
+  attachOpen(prepCircle, 'prep');
+  attachOpen(workCircle, 'work');
+  attachOpen(restCircle, 'rest');
+  attachOpen(roundsCircle, 'rounds');
+  gymStartBtn.addEventListener('click', startGym);
 
-  function closePicker(){
-    overlay.hidden = true;
-    releaseFocusTrap();
-    clockWrap.focus();
-  }
-
-  cancelPicker.addEventListener('click', closePicker);
-  confirmPicker.addEventListener('click', () => {
-    duration = selectedMin * 60 + selectedSec;
-    if (duration <= 0){
-      timeLabel.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-8px)' }, { transform: 'translateY(0)' }], { duration: 320, easing: 'cubic-bezier(.2,.9,.2,1)'});
-      return;
-    }
-    updateLabel(selectedMin, selectedSec);
-    closePicker();
-  });
-
+  // Keyboard trap close
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closePicker(); });
-
-  // audio start
-  function playStartSound(){
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const ctx = audioCtx;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(880, ctx.currentTime);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
-      o.connect(g).connect(ctx.destination);
-      o.start();
-      o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.12);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.38);
-      o.stop(ctx.currentTime + 0.42);
-    } catch (err){ console.warn('Audio start failed', err); }
-  }
-
-  // WakeLock helpers
-  async function requestWakeLock(){
-    try {
-      if ('wakeLock' in navigator && navigator.wakeLock.request){
-        wakeLock = await navigator.wakeLock.request('screen');
-        wakeLock.addEventListener('release', () => { wakeLock = null; });
-      } else { wakeLock = null; }
-    } catch (err){ console.warn('Wake lock request failed:', err); wakeLock = null; }
-  }
-  async function releaseWakeLock(){
-    try {
-      if (wakeLock && wakeLock.release) { await wakeLock.release(); wakeLock = null; }
-    } catch (err){ console.warn('Wake lock release failed', err); }
-  }
-
-  // color interpolation (unchanged)
-  function interpolateColor(pct){
-    function lerp(a,b,t){ return Math.round(a + (b-a)*t) }
-    function hexToRgb(hex){ hex = hex.replace('#',''); return [parseInt(hex.substring(0,2),16), parseInt(hex.substring(2,4),16), parseInt(hex.substring(4,6),16)]; }
-    const g = hexToRgb('4de0a6'), y = hexToRgb('ffd166'), r = hexToRgb('ff6b6b');
-    let c1,c2,t;
-    if (pct > 0.5){ t = (pct - 0.5) / 0.5; c1 = y; c2 = g; } else { t = pct / 0.5; c1 = r; c2 = y; }
-    const rgb = [ lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t) ];
-    return `rgb(${rgb.join(',')})`;
-  }
-
-  // focus trap
-  let lastFocused = null;
-  function trapFocus(modalRoot){
-    lastFocused = document.activeElement;
-    const focusable = modalRoot.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    const first = focusable[0];
-    const last = focusable[focusable.length-1];
-    function keyHandler(e){
-      if (e.key === 'Tab'){
-        if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
-      } else if (e.key === 'Escape'){ closePicker(); }
-    }
-    modalRoot._keyHandler = keyHandler;
-    document.addEventListener('keydown', keyHandler);
-    requestAnimationFrame(()=> first && first.focus());
-  }
-  function releaseFocusTrap(){
-    const modal = document.getElementById('pickerOverlay');
-    if (modal && modal._keyHandler){ document.removeEventListener('keydown', modal._keyHandler); modal._keyHandler = null; }
-    if (lastFocused && lastFocused.focus) lastFocused.focus();
-  }
-
-  // initial visuals
-  setTimeout(()=> {
-    const maybeMin = minutesWheel.querySelector('.list');
-    const maybeSec = secondsWheel.querySelector('.list');
-    if (maybeMin) markSelected(maybeMin, selectedMin);
-    if (maybeSec) markSelected(maybeSec, selectedSec);
-    updateLabel(selectedMin, selectedSec);
-  }, 220);
-
-  // visibilitychange: try re-request wake lock if needed
-  document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && wakeLock === null && rafId !== null){
-      await requestWakeLock();
-    }
+  document.addEventListener('keydown', (e) => {
+    if (isPickerOpen && e.key === 'Escape'){ closePicker(); }
   });
 
-  // resize/orientation: rebuild wheels when picker open
-  window.addEventListener('resize', () => {
-    if (!overlay.hidden){
-      const rebuiltMin = buildWheel(minutesWheel, MAX_MIN);
-      const rebuiltSec = buildWheel(secondsWheel, MAX_SEC);
-      setupWheelBehavior(minutesWheel, rebuiltMin, MAX_MIN, v => { selectedMin = v; });
-      setupWheelBehavior(secondsWheel, rebuiltSec, MAX_SEC, v => { selectedSec = v; });
-      setTimeout(()=> {
-        scrollToValue(minutesWheel, selectedMin);
-        scrollToValue(secondsWheel, selectedSec);
-      }, 120);
-    }
+  // Cleanup
+  window.addEventListener('beforeunload', () => {
+    releaseWakeLock();
+    cleanupListeners(minutesWheel);
+    cleanupListeners(secondsWheel);
+    try{ audioCtx?.close?.(); }catch{}
   });
 })();
