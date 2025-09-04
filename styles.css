@@ -1,4 +1,5 @@
-/* styles.css - include tutte le regole (big-touch + footer safe area) */
+/* styles.css - Aggiunta UI modalità Gym (4 cerchi), phase-label, mode-switch.
+   Riuso del look & feel esistente, senza toccare le parti core del ring/picker. */
 :root{
   --bg: #0f1114;
   --card: #0e1114;
@@ -36,14 +37,19 @@ body{
 
 .title{
   font-weight:800;
-  margin:0 0 34px 0;
+  margin:0 0 12px 0;
   font-size:22px;
   letter-spacing:1px;
   color: #dff7ee;
   text-shadow: 0 2px 12px rgba(0,0,0,0.6);
 }
 
-.timer-area{ display:flex; flex-direction:column; align-items:center; gap:36px; }
+.topbar{ display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom:18px; }
+.mode-switch{ display:flex; gap:8px; background:rgba(255,255,255,0.05); padding:6px; border-radius:12px; }
+.seg{ border:0; border-radius:8px; padding:8px 14px; color:#cfe8dc; background:transparent; font-weight:800; cursor:pointer; }
+.seg.selected{ background:linear-gradient(90deg,var(--accent-start),var(--accent-mid)); color:#06201b; }
+
+.timer-area{ display:flex; flex-direction:column; align-items:center; gap:16px; }
 
 .clock-wrap{
   width:var(--size);
@@ -62,9 +68,20 @@ body{
 }
 .clock-wrap:active{ transform: scale(.995) }
 
+.clock-wrap.paused {
+  background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.08));
+  box-shadow: 0 8px 40px rgba(2,6,12,0.4), inset 0 1px 0 rgba(255,255,255,0.01);
+}
+
 .progress-ring{ position:absolute; inset:0; width:100%; height:100%; transform: rotate(-90deg); pointer-events:none; }
 .ring-bg{ stroke: var(--ring-bg); stroke-width:12; }
-.ring{ stroke: var(--ring-color); stroke-width:12; transition: stroke-width .35s ease, stroke .3s linear; transform-origin: 50% 50%; will-change: stroke-dashoffset; }
+.ring{ 
+  stroke: var(--ring-color); 
+  stroke-width:12; 
+  transition: stroke-width .35s ease, stroke .3s linear; 
+  transform-origin: 50% 50%; 
+  will-change: stroke-dashoffset, stroke; 
+}
 
 .time-label{
   z-index:2;
@@ -74,12 +91,19 @@ body{
   user-select:none;
   text-shadow: 0 12px 44px rgba(0,0,0,0.75), 0 1px 0 rgba(255,255,255,0.02);
 }
+.time-label.paused { opacity: 0.8; text-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.01); }
 
-/* Controls + big start button */
+.phase-label{
+  color:#b9dcd0;
+  font-weight:800;
+  letter-spacing:.5px;
+  font-size:14px;
+  margin-bottom:-8px;
+}
+
 .controls{ display:flex; gap:18px; align-items:center; justify-content:center }
 .btn{ border:0; padding:12px 22px; border-radius:12px; font-weight:800; cursor:pointer; font-size:16px; background:transparent; color:var(--muted); transition: transform .12s ease, box-shadow .12s ease; }
 .btn:active{ transform: translateY(1px) }
-
 .btn.primary{
   background: linear-gradient(90deg,var(--accent-start),var(--accent-mid));
   color:#041014;
@@ -94,21 +118,42 @@ body{
 
 .hint{ margin:0; color:var(--muted); font-size:14px; }
 
+/* GYM grid */
+.gym-area{ display:flex; flex-direction:column; align-items:center; gap:18px; }
+.gym-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap:16px;
+  width:min(720px, 100%);
+}
+.circle-small{
+  display:grid;
+  place-items:center;
+  gap:8px;
+  border-radius:999px;
+  padding:16px;
+  aspect-ratio:1/1;
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+  box-shadow: 0 12px 60px rgba(2,6,12,0.5), inset 0 1px 0 rgba(255,255,255,0.02);
+  border:1px solid rgba(255,255,255,0.03);
+  cursor:pointer;
+}
+.circle-small:active{ transform: scale(.99) }
+.circle-title{ color:var(--muted); font-weight:800; font-size:14px; }
+.circle-value{ font-weight:900; font-size:28px; letter-spacing:.5px; }
+
 /* Picker overlay full screen */
 .overlay{ position:fixed; inset:0; display:grid; place-items:center; background: linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0.6)); z-index:1200; padding:0; }
 .overlay[hidden]{ display:none !important; }
 
-/* picker now respects safe-area and has absolute footer */
 .picker{
   width:100%;
-  /* usa dvh / lvh / fallback a 100vh per compatibilità */
-  height:100dvh; /* modern browsers */
-  height:100lvh; /* legacy experimental (some UA) */
-  height:100vh;  /* fallback */
+  height:100dvh;
+  height:100lvh;
+  height:100vh;
   max-width:none;
   border-radius:0;
   padding:18px 20px;
-  /* NON aggiungere padding-bottom qui: il footer è fixed */
   position:relative;
   display:flex;
   flex-direction:column;
@@ -116,12 +161,8 @@ body{
   background: linear-gradient(180deg, rgba(3,6,8,0.96), rgba(6,10,14,0.96));
   color:#eaf7ee;
 }
-
-/* header */
 .picker-header{ height:64px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .picker-header h2{ margin:0; font-size:20px; font-weight:800; }
-
-/* body: leave bottom padding so wheels aren't hidden by footer */
 .picker-body{
   flex:1 1 auto;
   display:flex;
@@ -130,50 +171,30 @@ body{
   padding:12px;
   gap:18px;
   overflow:hidden;
-  /* ulteriore margine per garantire che la parte bassa dei wheels non venga coperta */
   padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 96px);
 }
-
-/* footer fixed per garantire visibilità sopra le UI del browser */
 .picker-footer{
-  position: fixed; /* FIX: non absolute, così rimane visibile sempre */
+  position: fixed;
   left: 0;
   right: 0;
-  /* rimane sopra la barra del browser rispettando la safe area */
   bottom: calc(env(safe-area-inset-bottom, 12px));
   display:flex;
   align-items:center;
   justify-content:flex-end;
   gap:12px;
   padding:12px 20px;
-  z-index: 1400; /* più alto dell'overlay/picker */
+  z-index: 1400;
   pointer-events:auto;
-  /* separatore leggero per chiarezza */
-  backdrop-filter: blur(6px); /* opzionale ma gradevole su modern browsers */
+  backdrop-filter: blur(6px);
   background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.06));
   box-shadow: 0 -6px 28px rgba(0,0,0,0.45);
 }
-
 .picker-footer .btn { pointer-events: auto; z-index: 1401; }
 
-/* Wheels layout - force row, allow shrink to display both */
-.wheels{
-  display:flex;
-  flex-direction:row;
-  flex-wrap:nowrap;
-  gap:18px;
-  justify-content:center;
-  align-items:center;
-  width:100%;
-  max-width:1400px;
-  padding:0 12px;
-  box-sizing:border-box;
-  overflow-x:hidden;
-}
+/* Wheels */
+.wheels{ display:flex; flex-direction:row; gap:18px; justify-content:center; align-items:center; width:100%; max-width:1400px; padding:0 12px; box-sizing:border-box; overflow-x:hidden; }
 .wheel-col{ flex: 1 1 0; min-width:0; max-width:50%; display:flex; flex-direction:column; gap:8px; align-items:center; }
 .wheel-label{ color:var(--muted); font-size:15px; font-weight:700; }
-
-/* individual wheel */
 .wheel{
   width:100%;
   height:calc(100vh - 220px);
@@ -189,12 +210,12 @@ body{
   position:relative;
   border:1px solid rgba(255,255,255,0.03);
   touch-action: pan-y;
-  overscroll-behavior-x: contain;
+  overscroll-behavior: contain;
   user-select: none;
   scrollbar-width: thin;
+  scroll-behavior: auto;
 }
-
-/* list & items */
+.wheel.smooth-scroll { scroll-behavior: smooth; }
 .list{ list-style:none; padding:0; margin:0; display:block; width:100%; }
 .wheel-item{
   height:var(--wheel-item-h);
@@ -205,7 +226,7 @@ body{
   scroll-snap-align:center;
   user-select:none;
   font-size:var(--wheel-font-size);
-  transition: transform .12s ease, color .12s ease, text-shadow .12s ease;
+  transition: transform .15s ease, color .15s ease, text-shadow .15s ease, opacity .15s ease;
   transform-origin: center center;
   will-change: transform, opacity;
   width:100%;
@@ -214,10 +235,10 @@ body{
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
-
-.spacer{ pointer-events:none; visibility:hidden; height:var(--wheel-item-h); }
-
+.spacer{ visibility:hidden; height:var(--wheel-item-h); scroll-snap-align: none !important; }
 .wheel::after{
   content:"";
   position:absolute;
@@ -228,9 +249,8 @@ body{
   pointer-events:none;
   box-shadow: inset 0 0 0 2px rgba(255,255,255,0.02);
   background: linear-gradient(180deg, rgba(255,255,255,0.006), rgba(0,0,0,0.02));
+  z-index: 1;
 }
-
-/* selected */
 .wheel-item.selected{
   color: #031011;
   background: linear-gradient(90deg,var(--accent-start),var(--accent-mid));
@@ -238,9 +258,9 @@ body{
   transform: translateZ(52px) scale(1.12);
   text-shadow: 0 20px 60px rgba(0,0,0,0.6);
   box-shadow: 0 26px 88px rgba(3,6,9,0.68);
+  z-index: 2;
 }
 
-/* small breakpoints */
 @media (max-width:520px){
   :root{ --wheel-item-h: 100px; --wheel-font-size:64px; --size:300px; }
   .wheel{ height: calc(100vh - 210px) }
@@ -252,3 +272,6 @@ body{
   .wheel{ height: calc(100vh - 200px) }
   :root{ --wheel-item-h: 64px; --wheel-font-size:36px }
 }
+
+/* A11y helpers */
+.visually-hidden{ position:absolute !important; width:1px; height:1px; margin:-1px; border:0; padding:0; clip:rect(0 0 0 0); overflow:hidden; }
