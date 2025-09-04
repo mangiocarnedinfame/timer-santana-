@@ -1,38 +1,35 @@
 <!doctype html>
 <!--
-  index.html - Aggiunta modalità "Allenamento" (Gym/Interval).
-  - Aggiunti: switch di modalità (Timer | Allenamento), sezione 4 cerchi (Prep/Work/Rest/Giri),
-    label di fase sopra al cerchio grande durante il run, e riuso del picker wheel per tempi e giri.
+  index.html - Modifica: schermata principale SOLO 4 cerchi (Allenamento).
+  - Il timer tondo compare solo dopo "Avvia" con animazione di collasso dei 4 cerchi.
+  - Picker "Giri": singola wheel centrale.
 -->
 <html lang="it">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Timer</title>
+  <title>Interval Timer</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="app" id="app">
     <header class="topbar">
-      <h1 class="title" id="pageTitle">Timer</h1>
+      <h1 class="title" id="pageTitle">Allenamento</h1>
       <div class="mode-switch" role="tablist" aria-label="Cambia modalità">
-        <button id="modeTimer" role="tab" aria-selected="true" class="seg selected">Timer</button>
-        <button id="modeGym" role="tab" aria-selected="false" class="seg">Allenamento</button>
+        <button id="modeTimer" role="tab" aria-selected="false" class="seg">Timer</button>
+        <button id="modeGym" role="tab" aria-selected="true" class="seg selected">Allenamento</button>
       </div>
     </header>
 
-    <!-- TIMER STANDARD -->
-    <section class="timer-area" id="standardArea">
-      <!-- SVG circular ring -->
+    <!-- TIMER STANDARD (nascosto finché non si avvia una sequenza) -->
+    <section class="timer-area" id="standardArea" hidden>
       <div class="phase-label" id="phaseLabel" hidden aria-live="polite"></div>
-
       <div class="clock-wrap" id="clockWrap" role="button" aria-label="Apri selettore tempo"
            tabindex="0">
         <svg class="progress-ring" viewBox="0 0 200 200" aria-hidden="true">
           <circle class="ring-bg" cx="100" cy="100" r="88" fill="none" />
           <circle class="ring" cx="100" cy="100" r="88" fill="none" stroke-linecap="round" />
         </svg>
-
         <div class="time-label" id="timeLabel" aria-live="polite">00:30</div>
       </div>
 
@@ -41,13 +38,13 @@
         <button id="stopBtn" class="btn secondary" hidden>Ferma</button>
       </div>
 
-      <p class="hint">Clicca il cerchio per impostare minuti e secondi</p>
+      <p class="hint">Tocca il cerchio per impostare minuti e secondi</p>
     </section>
 
-    <!-- GYM / INTERVAL SETUP -->
-    <section class="gym-area" id="gymArea" hidden aria-labelledby="gymTitle">
+    <!-- GYM / INTERVAL SETUP (visibile di default) -->
+    <section class="gym-area" id="gymArea" aria-labelledby="gymTitle">
       <h2 id="gymTitle" class="visually-hidden">Impostazioni Allenamento</h2>
-      <div class="gym-grid">
+      <div class="gym-grid" id="gymGrid">
         <!-- Prep -->
         <button class="circle-small" id="prepCircle" role="button" tabindex="0"
                 aria-label="Imposta Preparazione">
@@ -87,8 +84,8 @@
           <h2 id="pickerTitle">Imposta</h2>
         </header>
         <div class="picker-body">
-          <div class="wheels">
-            <div class="wheel-col">
+          <div class="wheels" id="wheels">
+            <div class="wheel-col" id="minutesCol">
               <div class="wheel-label" id="minutesLabel">Minuti</div>
               <div class="wheel" id="minutesWheel" tabindex="0" aria-label="Seleziona minuti"></div>
             </div>
