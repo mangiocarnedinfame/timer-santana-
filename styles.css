@@ -1,5 +1,4 @@
-/* styles.css - Aggiunta UI modalità Gym (4 cerchi), phase-label, mode-switch.
-   Riuso del look & feel esistente, senza toccare le parti core del ring/picker. */
+/* styles.css - Modifica: home solo 4 cerchi + animazione collasso; wheel singola centrale per 'Giri'. */
 :root{
   --bg: #0f1114;
   --card: #0e1114;
@@ -12,8 +11,6 @@
   --ring-bg: rgba(255,255,255,0.06);
   --ring-color: var(--accent-start);
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-
-  /* BIG TOUCH */
   --wheel-item-h: 128px;
   --wheel-font-size: 88px;
 }
@@ -75,13 +72,7 @@ body{
 
 .progress-ring{ position:absolute; inset:0; width:100%; height:100%; transform: rotate(-90deg); pointer-events:none; }
 .ring-bg{ stroke: var(--ring-bg); stroke-width:12; }
-.ring{ 
-  stroke: var(--ring-color); 
-  stroke-width:12; 
-  transition: stroke-width .35s ease, stroke .3s linear; 
-  transform-origin: 50% 50%; 
-  will-change: stroke-dashoffset, stroke; 
-}
+.ring{ stroke: var(--ring-color); stroke-width:12; transition: stroke-width .35s ease, stroke .3s linear; transform-origin: 50% 50%; will-change: stroke-dashoffset, stroke; }
 
 .time-label{
   z-index:2;
@@ -125,6 +116,7 @@ body{
   grid-template-columns: repeat(2, minmax(160px, 1fr));
   gap:16px;
   width:min(720px, 100%);
+  position:relative;
 }
 .circle-small{
   display:grid;
@@ -137,10 +129,20 @@ body{
   box-shadow: 0 12px 60px rgba(2,6,12,0.5), inset 0 1px 0 rgba(255,255,255,0.02);
   border:1px solid rgba(255,255,255,0.03);
   cursor:pointer;
+  position:relative;
+  will-change: transform, opacity;
 }
 .circle-small:active{ transform: scale(.99) }
 .circle-title{ color:var(--muted); font-weight:800; font-size:14px; }
 .circle-value{ font-weight:900; font-size:28px; letter-spacing:.5px; }
+
+/* Collapse animation */
+@keyframes collapse-to-center {
+  to { transform: translate(var(--dx,0), var(--dy,0)) scale(0.2); opacity: 0; }
+}
+.circle-small.collapse-anim{
+  animation: collapse-to-center .42s cubic-bezier(.2,.9,.2,1) forwards;
+}
 
 /* Picker overlay full screen */
 .overlay{ position:fixed; inset:0; display:grid; place-items:center; background: linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0.6)); z-index:1200; padding:0; }
@@ -193,7 +195,9 @@ body{
 
 /* Wheels */
 .wheels{ display:flex; flex-direction:row; gap:18px; justify-content:center; align-items:center; width:100%; max-width:1400px; padding:0 12px; box-sizing:border-box; overflow-x:hidden; }
+.wheels.one-col{ gap:0; justify-content:center; }
 .wheel-col{ flex: 1 1 0; min-width:0; max-width:50%; display:flex; flex-direction:column; gap:8px; align-items:center; }
+.wheels.one-col .wheel-col{ max-width:560px; flex: 0 1 560px; }
 .wheel-label{ color:var(--muted); font-size:15px; font-weight:700; }
 .wheel{
   width:100%;
