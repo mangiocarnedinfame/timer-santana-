@@ -1,8 +1,4 @@
-// app.js - Estensione: modalità Allenamento (Gym) con 4 cerchi + sequenza Prep/Work/Rest/Rounds.
-// - Riuso del picker wheel (stesso markup/stili), Wake Lock, WebAudio, pause/resume con tap.
-// - Mantiene le funzioni principali: startTimer, pauseTimer, resumeTimer, finishTimer, stopTimer.
-// - Focus trap, keyboard e safe-area invariati.
-
+// app.js - Modifica: home solo 4 cerchi; animazione collasso verso il centro all'Avvio; wheel 'Giri' singola e centrata.
 (() => {
   // ----------------------------- DOM -----------------------------
   const app = document.getElementById('app');
@@ -12,7 +8,7 @@
   const modeTimerBtn = document.getElementById('modeTimer');
   const modeGymBtn = document.getElementById('modeGym');
 
-  // Standard timer area
+  // Standard timer area (hidden until running)
   const standardArea = document.getElementById('standardArea');
   const clockWrap = document.getElementById('clockWrap');
   const timeLabel = document.getElementById('timeLabel');
@@ -22,6 +18,7 @@
 
   // Gym area
   const gymArea = document.getElementById('gymArea');
+  const gymGrid = document.getElementById('gymGrid');
   const prepCircle = document.getElementById('prepCircle');
   const workCircle = document.getElementById('workCircle');
   const restCircle = document.getElementById('restCircle');
@@ -35,6 +32,8 @@
   // Picker modal
   const overlay = document.getElementById('pickerOverlay');
   const pickerTitle = document.getElementById('pickerTitle');
+  const minutesCol = document.getElementById('minutesCol');
+  const wheels = document.getElementById('wheels');
   const minutesLabel = document.getElementById('minutesLabel');
   const secondsLabel = document.getElementById('secondsLabel');
   const secondsCol = document.getElementById('secondsCol');
@@ -139,7 +138,7 @@
     sample.className='wheel-item';
     sample.textContent='00';
     container.appendChild(ul);
-    const itemH = 128; // synced with CSS var default
+    const itemH = 128; // sync with CSS var
     const containerH = Math.max(0, container.getBoundingClientRect().height) || (window.innerHeight - 220);
     const spacerH = Math.max(0, Math.round((containerH - itemH)/2));
 
@@ -159,7 +158,6 @@
   function setupWheel(container, list, max, onSelect){
     const state = container === minutesWheel ? wheelState.minutes : wheelState.seconds;
     const itemH = 128;
-    let lastScrollTop = container.scrollTop;
 
     function snap(){
       const y = container.scrollTop;
@@ -174,8 +172,6 @@
     }
 
     container._scrollHandler = () => {
-      if (state.locked) return;
-      lastScrollTop = container.scrollTop;
       if (state.scrollTimeout) clearTimeout(state.scrollTimeout);
       state.scrollTimeout = setTimeout(snap, 120);
     };
@@ -212,23 +208,24 @@
 
   function openPickerFor(ctx){
     pickerContext = ctx;
-    // Configure UI for context
+
     if (ctx === 'rounds'){
       pickerMode = 'integer';
       pickerTitle.textContent = 'Imposta giri';
       minutesLabel.textContent = 'Giri';
       secondsCol.hidden = true;
+      wheels.classList.add('one-col');
 
-      // Build only minutes wheel 0..99, but clamp at 1..99 on confirm
+      // Build only minutes wheel 0..99, clamp later
       const list = buildWheel(minutesWheel, 99);
       const current = Math.min(99, Math.max(1, gym.rounds));
       minutesWheel._value = current;
-      // Position to item
       const itemH = 128; minutesWheel.scrollTop = current*itemH;
       markSelected(list, current);
       setupWheel(minutesWheel, list, 99, v => { minutesWheel._value = v; });
     } else {
       pickerMode = 'time';
+      wheels.classList.remove('one-col');
       secondsCol.hidden = false;
       minutesLabel.textContent = 'Minuti';
       secondsLabel.textContent = 'Secondi';
@@ -239,11 +236,9 @@
         'rest': 'Imposta Rest'
       })[ctx] || 'Imposta';
 
-      // Build both wheels 0..59
       const minList = buildWheel(minutesWheel, MAX_MIN);
       const secList = buildWheel(secondsWheel, MAX_SEC);
 
-      // Initial values depending on context
       let initMin=0, initSec=0;
       if (ctx === 'standard-time'){ initMin = selectedMin; initSec = selectedSec; }
       if (ctx === 'prep'){ initMin = Math.floor(gym.prepSec/60); initSec = gym.prepSec%60; }
@@ -268,6 +263,7 @@
     if (!isPickerOpen) return;
     isPickerOpen = false;
     overlay.hidden = true;
+    wheels.classList.remove('one-col');
     releaseFocusTrap();
     cleanupListeners(minutesWheel);
     cleanupListeners(secondsWheel);
@@ -284,7 +280,6 @@
       return;
     }
 
-    // time values
     const m = minutesWheel._value ?? 0;
     const s = secondsWheel._value ?? 0;
     const secs = m*60 + s;
@@ -361,7 +356,6 @@
   const S = hexToRgb(COL_START), M = hexToRgb(COL_MID), E = hexToRgb(COL_END);
   function lerp(a,b,t){ return a + (b-a)*t; }
   function interpolateColor(pct){
-    // pct: 1 -> 0
     const t = 1 - Math.max(0, Math.min(1, pct));
     const mid = t<0.5 ? t*2 : (t-0.5)*2;
     const from = t<0.5 ? S : M;
@@ -373,7 +367,7 @@
   }
 
   // ----------------------------- Timer engine -----------------------------
-  function setRingProgress(pct){ // pct: 1..0
+  function setRingProgress(pct){
     const offset = C * (1 - pct);
     ring.style.strokeDashoffset = `${offset}px`;
     ring.style.stroke = interpolateColor(pct);
@@ -459,17 +453,14 @@
   }
 
   async function finishTimer(){
-    // Se in modalità Gym ed esistono fasi successive → beep corto e avanti.
     if (gym.active && gym.index < gym.phases.length - 1){
       await playStartSound();
       nextGymPhase();
       return;
     }
 
-    // Fine completa
     await playFinishSound();
 
-    // Reset UI cerchio
     startBtn.hidden = false;
     stopBtn.hidden = true;
     startBtn.setAttribute('aria-pressed','false');
@@ -480,7 +471,6 @@
     ring.style.strokeWidth = '12';
     ring.style.strokeDashoffset = `0px`;
 
-    // Se eravamo in Gym → torna alla griglia 4 cerchi
     if (gym.active){
       gym.active = false;
       phaseLabel.hidden = true;
@@ -511,7 +501,6 @@
     releaseWakeLock();
 
     if (gym.active){
-      // Abbandona sequenza e torna a setup Gym
       gym.active = false;
       phaseLabel.hidden = true;
       standardArea.hidden = true;
@@ -531,9 +520,7 @@
     }
     for (let r=1; r<=gym.rounds; r++){
       list.push({type:'work', dur:gym.workSec, round:r});
-      if (gym.restSec > 0){
-        list.push({type:'rest', dur:gym.restSec, round:r});
-      }
+      if (gym.restSec > 0){ list.push({type:'rest', dur:gym.restSec, round:r}); }
     }
     return list;
   }
@@ -551,31 +538,65 @@
     setPhaseInfo(phaseLabelText(ph));
     ring.style.strokeWidth = '18';
 
-    // Aggiorna etichetta iniziale
     updateLabel(Math.floor(ph.dur/60), ph.dur%60);
     runCountdown(ph.dur, false);
   }
 
+  function animateGridCollapse(callback){
+    // Ensure we can measure target center
+    standardArea.hidden = false;
+    const prevVis = standardArea.style.visibility;
+    standardArea.style.visibility = 'hidden';
+    standardArea.style.pointerEvents = 'none';
+
+    const targetRect = clockWrap.getBoundingClientRect();
+    const tx = targetRect.left + targetRect.width/2;
+    const ty = targetRect.top + targetRect.height/2;
+
+    // restore visibility for now
+    standardArea.style.visibility = prevVis || '';
+    standardArea.hidden = true;
+    standardArea.style.pointerEvents = '';
+
+    const circles = [prepCircle, workCircle, restCircle, roundsCircle];
+    circles.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width/2;
+      const cy = r.top + r.height/2;
+      el.style.setProperty('--dx', `${tx - cx}px`);
+      el.style.setProperty('--dy', `${ty - cy}px`);
+      el.classList.add('collapse-anim');
+    });
+
+    // After animation end
+    setTimeout(() => {
+      circles.forEach(el => el.classList.remove('collapse-anim'));
+      callback?.();
+    }, 460);
+  }
+
   function startGym(){
-    // Validazioni base
-    if (gym.workSec <= 0){  // shake il grid
+    if (gym.workSec <= 0){
       gymArea.animate([{transform:'translateX(0)'},{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'translateX(0)'}], {duration:260, easing:'ease-out'});
       return;
     }
     if (gym.rounds <= 0){ gym.rounds = 1; updateGymUI(); }
 
-    // Prepara fasi e UI
     gym.phases = buildPhases();
     gym.index = -1;
     gym.active = true;
 
-    // Switch a cerchio grande
-    gymArea.hidden = true;
-    standardArea.hidden = false;
-    pageTitle.textContent = 'Interval Timer';
+    // Collassa 4 cerchi verso il centro, poi mostra cerchio grande e parte
+    gymStartBtn.disabled = true;
+    animateGridCollapse(() => {
+      gymArea.hidden = true;
+      standardArea.hidden = false;
+      pageTitle.textContent = 'Interval Timer';
+      gymStartBtn.disabled = false;
 
-    playStartSound();
-    nextGymPhase();
+      playStartSound();
+      nextGymPhase();
+    });
   }
 
   // ----------------------------- Events -----------------------------
@@ -616,7 +637,6 @@
     }
   });
 
-  // Gym circles open pickers
   function attachOpen(el, ctx){
     el.addEventListener('click', () => { openPickerFor(ctx); });
     el.addEventListener('keydown', (e) => {
@@ -629,13 +649,11 @@
   attachOpen(roundsCircle, 'rounds');
   gymStartBtn.addEventListener('click', startGym);
 
-  // Keyboard trap close
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closePicker(); });
   document.addEventListener('keydown', (e) => {
     if (isPickerOpen && e.key === 'Escape'){ closePicker(); }
   });
 
-  // Cleanup
   window.addEventListener('beforeunload', () => {
     releaseWakeLock();
     cleanupListeners(minutesWheel);
