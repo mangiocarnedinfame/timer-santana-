@@ -130,7 +130,7 @@
     ul.className = 'list';
 
     // Calcola spacer per centrare perfettamente
-    const containerH = container.clientHeight || (window.innerHeight - 220);
+    const containerH = container.offsetHeight || (window.innerHeight - 220);
     const spacerH = Math.floor((containerH / 2) - (ITEM_HEIGHT / 2));
 
     // Top spacer
@@ -159,52 +159,51 @@
   }
 
   function updateWheelHighlight(container){
-    const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
-    const items = container.querySelectorAll('.wheel-item');
-    const scrollTop = container.scrollTop;
-    const containerH = container.clientHeight;
-    const centerY = containerH / 2;
-
-    let closestItem = null;
-    let closestDist = Infinity;
-    let closestValue = 0;
-
-    items.forEach(item => {
-      const rect = item.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      const itemRelativeTop = rect.top - containerRect.top;
-      const itemCenterY = itemRelativeTop + (rect.height / 2);
-      const dist = Math.abs(itemCenterY - centerY);
-
-      // Rimuovi classi precedenti
-      item.classList.remove('in-center', 'near-center');
-
-      // Trova l'elemento piÃ¹ vicino al centro
-      if (dist < closestDist){
-        closestDist = dist;
-        closestItem = item;
-        closestValue = parseInt(item.dataset.value) || 0;
-      }
-    });
-
-    // Applica classi in base alla distanza
-    items.forEach(item => {
-      const rect = item.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      const itemRelativeTop = rect.top - containerRect.top;
-      const itemCenterY = itemRelativeTop + (rect.height / 2);
-      const dist = Math.abs(itemCenterY - centerY);
-
-      if (dist < ITEM_HEIGHT * 0.3){
-        item.classList.add('in-center');
-      } else if (dist < ITEM_HEIGHT * 1.2){
-        item.classList.add('near-center');
-      }
-    });
-
-    tracking.currentValue = closestValue;
-    return closestValue;
-  }
+  const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
+  const items = container.querySelectorAll('.wheel-item');
+  
+  // CAMBIAMENTO CHIAVE: usa il parent element (wheel-container)
+  const wheelContainer = container.parentElement;
+  const containerRect = wheelContainer.getBoundingClientRect();
+  const containerCenter = containerRect.top + (containerRect.height / 2);
+  
+  let selectedValue = 0;
+  let minDistance = Infinity;
+  
+  // Prima passata: trova l'elemento più vicino al centro
+  items.forEach(item => {
+    const itemRect = item.getBoundingClientRect();
+    const itemCenter = itemRect.top + (itemRect.height / 2);
+    const distance = Math.abs(itemCenter - containerCenter);
+    
+    if (distance < minDistance) {
+      minDistance = distance;
+      selectedValue = parseInt(item.dataset.value) || 0;
+    }
+  });
+  
+  // Seconda passata: applica le classi basate sulla distanza
+  items.forEach(item => {
+    const itemRect = item.getBoundingClientRect();
+    const itemCenter = itemRect.top + (itemRect.height / 2);
+    const distance = Math.abs(itemCenter - containerCenter);
+    
+    // Rimuovi tutte le classi precedenti
+    item.classList.remove('in-center', 'near-center');
+    
+    // L'elemento è nel centro se è entro il 50% dell'altezza dell'item dal centro
+    if (distance < ITEM_HEIGHT * 0.5) {
+      item.classList.add('in-center');
+    } 
+    // L'elemento è vicino se è entro 1.5x l'altezza dell'item dal centro
+    else if (distance < ITEM_HEIGHT * 1.5) {
+      item.classList.add('near-center');
+    }
+  });
+  
+  tracking.currentValue = selectedValue;
+  return selectedValue;
+}
 
   function trackWheel(container){
     const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
