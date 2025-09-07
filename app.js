@@ -124,39 +124,42 @@
   }
 
   function buildWheel(container, max){
-    cleanupWheel(container);
-    
-    const ul = document.createElement('ul');
-    ul.className = 'list';
+  cleanupWheel(container);
+  
+  const ul = document.createElement('ul');
+  ul.className = 'list';
 
-    // Calcola spacer per centrare perfettamente
-    const containerH = container.offsetHeight || (window.innerHeight - 220);
-    const spacerH = Math.floor((containerH / 2) - (ITEM_HEIGHT / 2));
+  // Usa il parent container per ottenere l'altezza corretta
+  const wheelContainer = container.parentElement || container;
+  const containerH = wheelContainer.offsetHeight || (window.innerHeight - 220);
+  
+  // Calcolo più preciso dello spacer
+  const spacerH = Math.round((containerH - ITEM_HEIGHT) / 2);
 
-    // Top spacer
-    const topSpacer = document.createElement('li');
-    topSpacer.className = 'spacer';
-    topSpacer.style.height = `${spacerH}px`;
-    ul.appendChild(topSpacer);
+  // Top spacer
+  const topSpacer = document.createElement('li');
+  topSpacer.className = 'spacer';
+  topSpacer.style.height = `${spacerH}px`;
+  ul.appendChild(topSpacer);
 
-    // Items 0..max
-    for (let i = 0; i <= max; i++){
-      const li = document.createElement('li');
-      li.className = 'wheel-item';
-      li.textContent = pad(i);
-      li.dataset.value = i;
-      ul.appendChild(li);
-    }
-
-    // Bottom spacer
-    const bottomSpacer = document.createElement('li');
-    bottomSpacer.className = 'spacer';
-    bottomSpacer.style.height = `${spacerH}px`;
-    ul.appendChild(bottomSpacer);
-
-    container.appendChild(ul);
-    return ul;
+  // Items 0..max
+  for (let i = 0; i <= max; i++){
+    const li = document.createElement('li');
+    li.className = 'wheel-item';
+    li.textContent = pad(i);
+    li.dataset.value = i;
+    ul.appendChild(li);
   }
+
+  // Bottom spacer
+  const bottomSpacer = document.createElement('li');
+  bottomSpacer.className = 'spacer';
+  bottomSpacer.style.height = `${spacerH}px`;
+  ul.appendChild(bottomSpacer);
+
+  container.appendChild(ul);
+  return ul;
+}
 
   function updateWheelHighlight(container){
   const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
