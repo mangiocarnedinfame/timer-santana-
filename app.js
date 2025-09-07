@@ -268,7 +268,7 @@
         scrollToValue(container, clampedValue, true);
         tracking.currentValue = clampedValue;
         isUserScrolling = false;
-      }, 80); // Ridotto per snap piÃ¹ rapido
+      }, 150); // Ridotto per snap piÃ¹ rapido
     });
 
     // Keyboard navigation
