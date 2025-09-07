@@ -285,7 +285,7 @@ body{
   scale: 0.85;
 }
 
-.spacer{ visibility:hidden; height:var(--wheel-item-h); scroll-snap-align: none !important; }
+.spacer{ visibility:hidden; scroll-snap-align: none !important; }
 
 /* Selector box FISSO al centro della wheel */
 .wheel-selector{
