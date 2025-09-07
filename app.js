@@ -129,14 +129,15 @@
   const ul = document.createElement('ul');
   ul.className = 'list';
 
-  // Usa il parent container per ottenere l'altezza corretta
+  // Ottieni l'altezza del container parent (wheel-container)
   const wheelContainer = container.parentElement || container;
   const containerH = wheelContainer.offsetHeight || (window.innerHeight - 220);
   
-  // Calcolo più preciso dello spacer
-  const spacerH = Math.round((containerH - ITEM_HEIGHT) / 2);
+  // IMPORTANTE: Lo spacer deve essere esattamente metà container
+  // per permettere al primo e ultimo elemento di centrarsi
+  const spacerH = Math.floor(containerH / 2);
 
-  // Top spacer
+  // Top spacer - deve lasciare spazio per centrare lo 00
   const topSpacer = document.createElement('li');
   topSpacer.className = 'spacer';
   topSpacer.style.height = `${spacerH}px`;
@@ -151,13 +152,17 @@
     ul.appendChild(li);
   }
 
-  // Bottom spacer
+  // Bottom spacer - deve lasciare spazio per centrare il 59
   const bottomSpacer = document.createElement('li');
   bottomSpacer.className = 'spacer';
   bottomSpacer.style.height = `${spacerH}px`;
   ul.appendChild(bottomSpacer);
 
   container.appendChild(ul);
+  
+  // Force reflow
+  container.offsetHeight;
+  
   return ul;
 }
 
