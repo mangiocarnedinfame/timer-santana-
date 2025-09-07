@@ -244,7 +244,7 @@ body{
   background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.03));
   overflow-y:auto;
   overflow-x:hidden;
-  /* scroll-snap-type: y mandatory; */
+  scroll-snap-type: y proximity;
   -webkit-overflow-scrolling: touch;
   transform-style:preserve-3d;
   perspective:900px;
