@@ -240,36 +240,48 @@
   }
 
   function setupWheel(container, list, max, initialValue){
-    const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
-    let scrollTimeout = null;
-    let isUserScrolling = false;
+  const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
+  let scrollTimeout = null;
+  let isUserScrolling = false;
+  let isSnapping = false;  // AGGIUNGI questo flag
 
-    // Posiziona inizialmente
-    scrollToValue(container, initialValue, false);
-    tracking.currentValue = initialValue;
+  // Posiziona inizialmente
+  scrollToValue(container, initialValue, false);
+  tracking.currentValue = initialValue;
 
-    // Avvia tracking visuale
-    trackWheel(container);
+  // Avvia tracking visuale
+  trackWheel(container);
 
-    // Gestione scroll con snap migliorato
-    container.addEventListener('scroll', () => {
-      isUserScrolling = true;
+  // Gestione scroll migliorata
+  container.addEventListener('scroll', () => {
+    if (isSnapping) return;  // Ignora se stiamo già facendo snap
+    
+    isUserScrolling = true;
+    
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      if (!isUserScrolling || isSnapping) return;
       
-      if (scrollTimeout) clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        if (!isUserScrolling) return;
-        
-        // Calcola valore piÃ¹ vicino
-        const scrollTop = container.scrollTop;
-        const value = Math.round(scrollTop / ITEM_HEIGHT);
-        const clampedValue = Math.min(max, Math.max(0, value));
-        
-        // Snap al valore piÃ¹ vicino
+      // Calcola il valore più vicino basato sulla posizione attuale
+      const scrollTop = container.scrollTop;
+      const rawValue = scrollTop / ITEM_HEIGHT;
+      const value = Math.round(rawValue);
+      const clampedValue = Math.min(max, Math.max(0, value));
+      
+      // Solo se siamo significativamente fuori allineamento
+      const offset = Math.abs(rawValue - value);
+      if (offset > 0.1) {  // Solo se siamo più del 10% fuori centro
+        isSnapping = true;
         scrollToValue(container, clampedValue, true);
-        tracking.currentValue = clampedValue;
-        isUserScrolling = false;
-      }, 150); // Ridotto per snap piÃ¹ rapido
-    });
+        setTimeout(() => {
+          isSnapping = false;
+        }, 300);
+      }
+      
+      tracking.currentValue = clampedValue;
+      isUserScrolling = false;
+    }, 100);  // Timeout medio
+  });
 
     // Keyboard navigation
     container.addEventListener('keydown', (e) => {
