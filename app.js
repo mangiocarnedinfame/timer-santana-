@@ -52,7 +52,18 @@
   // ----------------------------- Config/State -----------------------------
   const MAX_MIN = 59;
   const MAX_SEC = 59;
-  const ITEM_HEIGHT = 128; // Sync with CSS
+  // const ITEM_HEIGHT = 128; // Sync with CSS
+
+  /** Misura runtime l'altezza reale dell'item (no costanti hardcoded) */
+function getItemHeight(container){
+  const el = container.querySelector('.wheel-item');
+  if (el && el.clientHeight) return el.clientHeight;
+  // Fallback da CSS var o 128
+  const rootH = parseFloat(getComputedStyle(document.documentElement)
+                 .getPropertyValue('--wheel-item-h')) || 128;
+  return rootH;
+}
+
 
   // Standard timer state
   let selectedMin = 0, selectedSec = 30;
@@ -169,6 +180,8 @@
   function updateWheelHighlight(container){
   const tracking = container === minutesWheel ? wheelTracking.minutes : wheelTracking.seconds;
   const items = container.querySelectorAll('.wheel-item');
+  const itemH = getItemHeight(container);
+
   
   // CAMBIAMENTO CHIAVE: usa il parent element (wheel-container)
   const wheelContainer = container.parentElement;
@@ -200,11 +213,13 @@
     item.classList.remove('in-center', 'near-center');
     
     // L'elemento è nel centro se è entro il 50% dell'altezza dell'item dal centro
-    if (distance < ITEM_HEIGHT * 0.5) {
+    // if (distance < ITEM_HEIGHT * 0.5) {
+    if (distance < itemH * 0.5) {
       item.classList.add('in-center');
     } 
     // L'elemento è vicino se è entro 1.5x l'altezza dell'item dal centro
-    else if (distance < ITEM_HEIGHT * 1.5) {
+    // else if (distance < ITEM_HEIGHT * 1.5) {
+    else if (distance < itemH * 1.5) {
       item.classList.add('near-center');
     }
   });
@@ -225,8 +240,10 @@
   }
 
   function scrollToValue(container, value, smooth = false){
-    const itemH = ITEM_HEIGHT;
-    const targetScroll = value * itemH;
+    // const itemH = ITEM_HEIGHT;
+    const itemH = getItemHeight(container);
+    // const targetScroll = value * itemH;
+    const targetScroll = value * itemH + itemH / 2;
     
     if (smooth){
       container.style.scrollBehavior = 'smooth';
@@ -263,8 +280,10 @@
       if (!isUserScrolling || isSnapping) return;
       
       // Calcola il valore più vicino basato sulla posizione attuale
+      const itemH = getItemHeight(container);
       const scrollTop = container.scrollTop;
-      const rawValue = scrollTop / ITEM_HEIGHT;
+      // const rawValue = scrollTop / ITEM_HEIGHT;
+      const rawValue = (scrollTop - itemH / 2) / itemH;
       const value = Math.round(rawValue);
       const clampedValue = Math.min(max, Math.max(0, value));
       
@@ -429,6 +448,26 @@
     overlay.hidden = false;
     trapFocus(overlay);
   }
+
+  /* Rebuild wheels su resize/orientation per riallineare spacer & altezze */
+window.addEventListener('resize', () => {
+  if (!isPickerOpen) return;
+  const minVal = wheelTracking.minutes.currentValue;
+  const secVal = wheelTracking.seconds.currentValue;
+
+  const minList = buildWheel(minutesWheel, MAX_MIN);
+  const secList = buildWheel(secondsWheel, MAX_SEC);
+
+  setupWheel(minutesWheel, minList, MAX_MIN, minVal);
+  setupWheel(secondsWheel, secList, MAX_SEC, secVal);
+});
+
+window.addEventListener('orientationchange', () => {
+  // Stesso handler di resize
+  const evt = new Event('resize');
+  window.dispatchEvent(evt);
+});
+
 
   function closePicker(){
     if (!isPickerOpen) return;
